@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LG Subscribe</title>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 50px 20px; background-color: #f4f7f9; margin: 0; }
+        .card { background: white; padding: 30px; border-radius: 20px; display: inline-block; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 350px; }
+        h2 { color: #333; margin-bottom: 10px; font-size: 1.4rem; }
+        p { color: #666; font-size: 1rem; line-height: 1.5; }
+        .profile-img { width: 80px; height: 80px; border-radius: 50%; display: none; margin: 0 auto 15px auto; object-fit: cover; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .btn-send { 
+            display: none; background-color: #00b900; color: white; border: none; padding: 16px 20px; border-radius: 50px; 
+            font-size: 18px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 20px; box-shadow: 0 4px 12px rgba(0,185,0,0.3); transition: all 0.2s;
+        }
+        .btn-send:active { transform: scale(0.95); opacity: 0.9; }
+        #debug { font-size: 10px; color: #ccc; margin-top: 30px; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <img id="profile-img" class="profile-img" src="" alt="Profile">
+        <h2 id="status">กำลังโหลดระบบ...</h2>
+        <p id="sub-text">กรุณารอสักครู่</p>
+        <button id="send-btn" class="btn-send">กดเพื่อทักทาย LG Subscribe</button>
+    </div>
+
+    <div id="debug">System Ready | Tracking Mode</div>
+
+    <script>
+        const GOOGLE_SHEET_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbx6cUTz46HMKc8aluUJ2j7RguKRb7Gjiv2ZkesXxxfJghjyVBZivZ2hi9sryctszKHFfQ/exec"; 
+        const LINE_OA_ID = "@653zqtbh"; 
+
+        const statusEl = document.getElementById('status');
+        const subTextEl = document.getElementById('sub-text');
+        const btn = document.getElementById('send-btn');
+        const profileImg = document.getElementById('profile-img');
+
+        // --- ระบบดึงค่าพารามิเตอร์ (Tracking Source) ---
+        const urlParams = new URLSearchParams(window.location.search);
+        let trackingSource = urlParams.get('source');
+
+        // เก็บลง Session Storage เผื่อหน้าเว็บถูก Reload
+        if (trackingSource) {
+            sessionStorage.setItem('liff_source', trackingSource);
+        } else {
+            trackingSource = sessionStorage.getItem('liff_source') || 'Organic / No Ref';
+        }
+        // ---------------------------------------------
+
+        async function main() {
+            try {
+                await liff.init({ liffId: "2009681507-7NYat0hP" });
+
+                if (!liff.isLoggedIn()) {
+                    liff.login();
+                    return;
+                }
+
+                const friendship = await liff.getFriendship();
+                
+                if (friendship.friendFlag) {
+                    const profile = await liff.getProfile();
+                    profileImg.src = profile.pictureUrl;
+                    profileImg.style.display = "block";
+                    statusEl.innerText = `สวัสดีคุณ ${profile.displayName}`;
+                    subTextEl.innerText = "ยินดีที่ได้เป็นเพื่อนกันครับ! กดปุ่มด้านล่างเพื่อเริ่มแชทกับเราได้เลย";
+                    
+                    btn.style.display = "block"; 
+                    btn.onclick = redirectToOA; 
+
+                    saveDataToGoogleSheet(profile);
+                } else {
+                    statusEl.innerText = "ยังไม่ได้เพิ่มเพื่อน";
+                    subTextEl.innerText = "กำลังเปิดหน้าต่างเพิ่มเพื่อน...";
+                    await liff.requestFriendship();
+                    location.reload();
+                }
+            } catch (err) {
+                statusEl.innerText = "เกิดข้อผิดพลาด";
+                subTextEl.innerText = err.message;
+            }
+        }
+
+        function redirectToOA() {
+            const message = "สวัสดีครับ LG Subscribe! ยินดีที่ได้รู้จักครับ";
+            const encodedMsg = encodeURIComponent(message);
+            window.location.href = `https://line.me/R/oaMessage/${LINE_OA_ID}/?${encodedMsg}`;
+        }
+
+        function saveDataToGoogleSheet(profile) {
+            const data = {
+                userId: profile.userId,
+                displayName: profile.displayName,
+                pictureUrl: profile.pictureUrl,
+                source: trackingSource // ส่งแหล่งที่มาไปบันทึก
+            };
+            fetch(GOOGLE_SHEET_WEB_APP_URL, {
+                method: 'POST',
+                body: JSON.stringify(data),
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+            }).catch(error => console.error("Sheet Error:", error));
+        }
+
+        main();
+    </script>
+</body>
+</html>
